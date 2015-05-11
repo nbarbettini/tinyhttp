@@ -128,7 +128,8 @@ namespace TinyHttp
         public Response HandleRequest(Request request)
         {
             var route = _routes.FirstOrDefault(r => r.IsMatch(request));
-            OnRequest(route, request);
+            if (route != null)
+                OnRequest(route, request);
             return route != null ? route.Invoke(request) : new NotFoundResponse();
         }
 
