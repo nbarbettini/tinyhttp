@@ -6,8 +6,8 @@ namespace TinyHttp.Tests
     {
         public Program()
         {
-            Get["/"] = s => new HtmlResponse("<h1>Welcome</h1>");
-            Get["/hello/{name}"] = s => new HtmlResponse(String.Format("<h1>Hello, {0}</h1>", Uri.UnescapeDataString(s.name)));
+            Get["/"] = (p, req) => new HtmlResponse("<h1>Welcome</h1>");
+            Get["/hello/{name}"] = (p, req) => new HtmlResponse(String.Format("<h1>Hello, {0}</h1>", Uri.UnescapeDataString(p.name)));
         }
 
         public static void Main()

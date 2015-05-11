@@ -65,9 +65,13 @@ namespace TinyHttp
 
         private void OnGetContext(IAsyncResult asyncResult)
         {
-            var context = _listener.EndGetContext(asyncResult);
-            Listen();
-            ThreadPool.QueueUserWorkItem(delegate { Process(context); }, null);
+            try
+            {
+                var context = _listener.EndGetContext(asyncResult);
+                Listen();
+                ThreadPool.QueueUserWorkItem(delegate { Process(context); }, null);
+            }
+            catch (HttpListenerException) { /* Thrown when listener is closed while waiting for a request */ }
         }
 
         private void Listen()
@@ -124,6 +128,7 @@ namespace TinyHttp
         public Response HandleRequest(Request request)
         {
             var route = _routes.FirstOrDefault(r => r.IsMatch(request));
+            OnRequest(route, request);
             return route != null ? route.Invoke(request) : new NotFoundResponse();
         }
 
@@ -133,6 +138,8 @@ namespace TinyHttp
         protected RouteBuilder Delete { get { return new RouteBuilder("DELETE", this); } }
         protected RouteBuilder Options { get { return new RouteBuilder("OPTIONS", this); } }
         protected RouteBuilder Patch { get { return new RouteBuilder("PATCH", this); } }
+
+        protected Action<Route, Request> OnRequest { get; set; }
 
         protected class RouteBuilder
         {
@@ -145,8 +152,9 @@ namespace TinyHttp
                 _requestProcessor = requestProcessor;
             }
 
-            public Func<dynamic, Response> this[string path] { set { AddRoute(path, value); } }
-            private void AddRoute(string path, Func<object, Response> value) { _requestProcessor._routes.Add(new Route(_method, path, value)); }
+            public Func<dynamic, Request, Response> this[string path] { set { AddRoute(path, value); } }
+
+            private void AddRoute(string path, Func<object, Request, Response> value) { _requestProcessor._routes.Add(new Route(_method, path, value)); }
         }
     }
 
@@ -158,10 +166,13 @@ namespace TinyHttp
 
         public string Method { get; private set; }
         public string Path { get; private set; }
-        public Func<dynamic, Response> Action { get; private set; }
+        public Func<dynamic, Request, Response> Action { get; private set; }
         public Regex Regex { get; private set; }
 
         public Route(string method, string path, Func<dynamic, Response> action)
+            : this(method, path, (param, request) => action(param)) { }
+
+        public Route(string method, string path, Func<dynamic, Request, Response> action)
         {
             Method = method;
             Path = path;
@@ -178,7 +189,7 @@ namespace TinyHttp
         {
             var match = Regex.Match(request.Url.AbsolutePath);
             var parameters = DynamicDictionary.Create(_paramNames.ToDictionary(k => k, k => (object) match.Groups[k].Value));
-            return Action.Invoke(parameters);
+            return Action.Invoke(parameters, request);
         }
     }
 
@@ -265,6 +276,15 @@ namespace TinyHttp
         {
             ContentType = contentType;
             StatusCode = HttpStatusCode.NotFound;
+        }
+    }
+
+    public class BadRequestResponse : TextResponse
+    {
+        public BadRequestResponse(string message, string contentType = "text/plain", Encoding encoding = null) : base(message, contentType, encoding)
+        {
+            ContentType = contentType;
+            StatusCode = HttpStatusCode.BadRequest;
         }
     }
 
